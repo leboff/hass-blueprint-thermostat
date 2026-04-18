@@ -183,7 +183,11 @@ blueprint:
         boolean:
     restore_climate_state:
       name: Remember Previous Climate State
-      description: Call climate.turn_on to let HA restore the previous HVAC mode instead of forcing "auto".
+      description: >
+        When on, the blueprint snapshots each affected climate entity
+        (hvac_mode, target temperature, fan mode) via scene.create before
+        turning it off, then restores it via scene.turn_on when all windows
+        in the zone are closed. When off, restores to "auto" mode instead.
       default: true
       selector:
         boolean:
@@ -294,6 +298,9 @@ variables:
 
   zone_windows_open_count: >
     {{ expand(zone_windows) | selectattr('state', 'eq', 'on') | list | count }}
+
+  snapshot_scene_id: >-
+    {% if zone_mode == 'shared' or not trigger_area %}hvac_autosnap_shared{% else %}hvac_autosnap_{{ trigger_area }}{% endif %}
 
   any_window_open: >
     {{ expand(window_sensors) | selectattr('state', 'eq', 'on') | list | count > 0 }}
@@ -513,6 +520,20 @@ action:
           - condition: template
             value_template: "{{ outside_temp_extreme }}"
           sequence:
+          # Snapshot the current HVAC state so we can truly restore later.
+          # Only snapshot when at least one climate is NOT already off, to
+          # avoid overwriting a valid snapshot with an all-off state.
+          - if:
+              condition: template
+              value_template: >
+                {{ restore_climate_state
+                   and expand(affected_climates)
+                       | rejectattr('state','eq','off') | list | count > 0 }}
+            then:
+            - service: scene.create
+              data:
+                scene_id: "{{ snapshot_scene_id }}"
+                snapshot_entities: "{{ affected_climates }}"
           - service: climate.turn_off
             target:
               entity_id: "{{ affected_climates }}"
@@ -529,6 +550,17 @@ action:
           - condition: template
             value_template: >
               {{ expand(zone_windows) | selectattr('state','eq','on') | list | count > 0 }}
+          - if:
+              condition: template
+              value_template: >
+                {{ restore_climate_state
+                   and expand(affected_climates)
+                       | rejectattr('state','eq','off') | list | count > 0 }}
+            then:
+            - service: scene.create
+              data:
+                scene_id: "{{ snapshot_scene_id }}"
+                snapshot_entities: "{{ affected_climates }}"
           - service: climate.turn_off
             target:
               entity_id: "{{ affected_climates }}"
@@ -572,12 +604,28 @@ action:
         value_template: >
           {{ zone_windows_open_count == 0 and affected_climates | count > 0 }}
       then:
+      - variables:
+          snapshot_available: >
+            {{ states('scene.' + snapshot_scene_id)
+               not in ['unknown', 'unavailable', 'none', None] }}
       - choose:
+        # Preferred path: restore the snapshot we took before turn-off.
+        # This recovers hvac_mode, target temperature, and fan mode -
+        # things climate.turn_on does not reliably restore.
         - conditions:
           - condition: template
-            value_template: "{{ restore_climate_state }}"
+            value_template: "{{ restore_climate_state and snapshot_available }}"
           sequence:
-          # climate.turn_on lets each integration restore its prior hvac_mode
+          - service: scene.turn_on
+            target:
+              entity_id: "scene.{{ snapshot_scene_id }}"
+        # Fallback: restore requested but no snapshot exists (e.g. the
+        # automation was reloaded or HA was restarted while windows were
+        # open). Best-effort turn_on so the system isn't left off.
+        - conditions:
+          - condition: template
+            value_template: "{{ restore_climate_state and not snapshot_available }}"
+          sequence:
           - service: climate.turn_on
             target:
               entity_id: "{{ affected_climates }}"
@@ -593,7 +641,9 @@ action:
         message: >
           ✅ {{ trigger_friendly }} closed. All windows in
           {{ trigger_area_label }} are closed. HVAC restored
-          {% if restore_climate_state %}to its previous mode{% else %}to auto{% endif %}.
+          {% if restore_climate_state and snapshot_available %}from snapshot (prior mode, setpoint, fan)
+          {% elif restore_climate_state %}via turn_on (no snapshot available)
+          {% else %}to auto mode{% endif %}.
     - if:
         condition: template
         value_template: "{{ zone_windows_open_count > 0 }}"
