@@ -106,25 +106,41 @@ blueprint:
       selector:
         entity:
           domain: timer
+    temperature_unit:
+      name: Temperature Unit
+      description: >
+        Unit used for the threshold values below and in all notifications.
+        If your outdoor temperature sensor reports a different unit, its value
+        is automatically converted to this unit at runtime.
+      default: "°C"
+      selector:
+        select:
+          options:
+          - "°C"
+          - "°F"
     temp_high_threshold:
       name: High Temperature Threshold
-      description: Above this outdoor temperature, HVAC turns off immediately on window open.
+      description: >
+        Above this outdoor temperature, HVAC turns off immediately on window
+        open. Enter the value in the unit selected above (typical: 25 °C /
+        77 °F).
       default: 25
       selector:
         number:
-          min: 15
-          max: 40
-          unit_of_measurement: "°C"
+          min: -20
+          max: 130
           step: 0.5
     temp_low_threshold:
       name: Low Temperature Threshold
-      description: Below this outdoor temperature, HVAC turns off immediately on window open.
+      description: >
+        Below this outdoor temperature, HVAC turns off immediately on window
+        open. Enter the value in the unit selected above (typical: 15 °C /
+        59 °F).
       default: 15
       selector:
         number:
-          min: -5
-          max: 20
-          unit_of_measurement: "°C"
+          min: -20
+          max: 130
           step: 0.5
     daytime_hvac_timeout:
       name: Daytime HVAC Off Timeout
@@ -211,6 +227,7 @@ variables:
   pressure_threshold: !input pressure_threshold
   temp_high_threshold: !input temp_high_threshold
   temp_low_threshold: !input temp_low_threshold
+  temperature_unit: !input temperature_unit
   window_open_timer: !input window_open_timer
   window_sensors: !input window_sensors
   climate_entities_input: !input climate_entities
@@ -297,8 +314,30 @@ variables:
   active_hvac_timeout: >
     {{ nighttime_hvac_timeout if is_night_time else daytime_hvac_timeout }}
 
+  sensor_native_unit: >
+    {% if temp_sensor_available %}
+      {{ state_attr(temperature_sensor, 'unit_of_measurement') or temperature_unit }}
+    {% else %}
+      {{ temperature_unit }}
+    {% endif %}
+
   outside_temp: >
-    {{ states(temperature_sensor) | float(0) if temp_sensor_available else none }}
+    {% if not temp_sensor_available %}
+      {{ none }}
+    {% else %}
+      {% set raw = states(temperature_sensor) | float(0) %}
+      {% set native = sensor_native_unit | trim %}
+      {% set target = temperature_unit | trim %}
+      {% if native == target %}
+        {{ raw }}
+      {% elif native in ['°F','F','fahrenheit'] and target in ['°C','C'] %}
+        {{ ((raw - 32) * 5 / 9) | round(1) }}
+      {% elif native in ['°C','C','celsius'] and target in ['°F','F'] %}
+        {{ (raw * 9 / 5 + 32) | round(1) }}
+      {% else %}
+        {{ raw }}
+      {% endif %}
+    {% endif %}
 
   outside_temp_extreme: >
     {% if temp_sensor_available %}
@@ -413,7 +452,7 @@ action:
         type: notify
         message: >
           🚪 {{ trigger_friendly }} ({{ trigger_area_label }}) is open.
-          {% if temp_sensor_available %}Outside: {{ outside_temp }}°C.{% endif %}
+          {% if temp_sensor_available %}Outside: {{ outside_temp }} {{ temperature_unit }}.{% endif %}
           {% if temp_sensor_available and outside_temp < temp_low_threshold %}
           Please close within {{ timer_duration_label }} to conserve energy.
           {% endif %}
@@ -482,7 +521,7 @@ action:
             type: notify
             message: >
               ❄️ HVAC off (zone: {{ trigger_area_label }}) because outside is
-              {{ outside_temp }}°C - outside the comfort band.
+              {{ outside_temp }} {{ temperature_unit }} - outside the comfort band.
         default:
           # Delayed shutoff - timeout depends on is_night_time
           - delay: "{{ active_hvac_timeout }}"
@@ -584,10 +623,10 @@ action:
       domain: mobile_app
       type: notify
       message: >
-        {% if temp_sensor_available and outside_temp < 15 %}🥶{% else %}⏱️{% endif %}
+        {% if temp_sensor_available and outside_temp < temp_low_threshold %}🥶{% else %}⏱️{% endif %}
         Reminder: these windows are still open after {{ timer_duration_label }}:
         {{ open_windows_names }}.
-        {% if temp_sensor_available %}Outside: {{ outside_temp }}°C.{% endif %}
+        {% if temp_sensor_available %}Outside: {{ outside_temp }} {{ temperature_unit }}.{% endif %}
 
   # -----------------------------------------------------------------
   # BLOCK 4 - nightly pre-bed check
@@ -604,7 +643,7 @@ action:
       message: >
         🌙 Night check: windows still open before bed:
         {{ open_windows_names }}.
-        {% if temp_sensor_available %}Outside: {{ outside_temp }}°C.{% endif %}
+        {% if temp_sensor_available %}Outside: {{ outside_temp }} {{ temperature_unit }}.{% endif %}
         Night period starts at {{ night_start_time }}.
 
 mode: restart

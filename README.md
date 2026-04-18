@@ -2,7 +2,7 @@
 
 # 🏰 Yet Another HVAC Control Blueprint - But Different!
 
-[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/michaelheichler/hass-blueprint-thermostat/refs/heads/main/hass-blueprint-thermostat.yaml)
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/leboff/hass-blueprint-thermostat/refs/heads/main/hass-blueprint-thermostat.yaml)
 
 ![Home Assistant Logo](https://www.home-assistant.io/images/blog/2023-09-ha10/home-assistant-logo-new.png)
 
@@ -32,6 +32,7 @@ An intelligent Home Assistant blueprint for HVAC control that goes beyond simple
   - Entity-list `state: "on"` conditions replaced with templates so "any" (not "all") is correctly evaluated.
   - Timer-duration display no longer breaks on durations that include hours.
 - **Optional notification throttle helper.** Point `notification_throttle_store` at an `input_datetime` and the cooldown becomes functional; leave it blank to skip.
+- **Fahrenheit support.** New `temperature_unit` input (`°C` or `°F`). Thresholds are entered in the chosen unit and notifications display it. If the outdoor temperature sensor reports a different unit than you selected, its value is converted automatically using the sensor's `unit_of_measurement` attribute.
 
 ## ✨ Key Features
 
