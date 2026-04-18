@@ -33,6 +33,7 @@ An intelligent Home Assistant blueprint for HVAC control that goes beyond simple
   - Timer-duration display no longer breaks on durations that include hours.
 - **Optional notification throttle helper.** Point `notification_throttle_store` at an `input_datetime` and the cooldown becomes functional; leave it blank to skip.
 - **Fahrenheit support.** New `temperature_unit` input (`°C` or `°F`). Thresholds are entered in the chosen unit and notifications display it. If the outdoor temperature sensor reports a different unit than you selected, its value is converted automatically using the sensor's `unit_of_measurement` attribute.
+- **True HVAC state save/restore.** When `restore_climate_state` is on, the blueprint now snapshots each affected climate entity with `scene.create` before turning it off (capturing `hvac_mode`, target temperature, and fan mode) and restores it with `scene.turn_on` when every window in that zone closes. Replaces the previous `climate.turn_on` call, which depended on the underlying integration (e.g. generic thermostat doesn't actually remember the prior mode). Snapshot scenes are per-zone (`scene.hvac_autosnap_<area_id>`), so multi-zone restorations don't collide.
 
 ## ✨ Key Features
 
