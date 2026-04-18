@@ -16,6 +16,23 @@
 
 An intelligent Home Assistant blueprint for HVAC control that goes beyond simple window-open detection. This blueprint focuses on energy efficiency while maintaining comfort through smart temperature management and configurable behaviors.
 
+## 🆕 What's New
+
+- **Multi-zone HVAC support (area-based).** Provide multiple climate entities via `climate_entities`. When a window opens, the blueprint looks up that window's Home Assistant area and only turns off climate entities in the same area. Restoration only fires once every window in that zone is closed.
+- **`zone_mode` setting.** Choose `area` (true zoning by HA area) or `shared` (all listed climates are treated as one pool - legacy behavior).
+- **Backward compatible.** The legacy `climate_entity` input is still accepted and is merged into the multi-zone list; existing automations keep working without reconfiguration.
+- **Bug fixes.**
+  - `any_window_open` now correctly reports whether any window is open (previous template always returned `false`).
+  - State restoration now calls `climate.turn_on` so HA restores the prior mode, instead of reading the mode *after* turn-on.
+  - Notifications, area names, and reminders use the triggering window's area and friendly name rather than always `window_sensors[0]`.
+  - `seasonal_mode` now actually gates the HVAC-off action.
+  - `require_temperature_sensor` is enforced as a top-level condition.
+  - `debug_mode` writes to the HA logbook at key decision points.
+  - Daytime/nighttime handling merged into a single sequence with a templated delay.
+  - Entity-list `state: "on"` conditions replaced with templates so "any" (not "all") is correctly evaluated.
+  - Timer-duration display no longer breaks on durations that include hours.
+- **Optional notification throttle helper.** Point `notification_throttle_store` at an `input_datetime` and the cooldown becomes functional; leave it blank to skip.
+
 ## ✨ Key Features
 
 - 🌡️ **Smart Temperature Thresholds**
@@ -58,8 +75,9 @@ An intelligent Home Assistant blueprint for HVAC control that goes beyond simple
 ## ⚙️ Configuration Options
 
 ### Required Settings
-- `climate_entity`: Your HVAC system
-- `window_sensors`: Window/door sensors to monitor
+- `climate_entities`: One or more HVAC systems (multi-zone); legacy `climate_entity` still accepted
+- `zone_mode`: `area` (default) or `shared` - see "What's New" above
+- `window_sensors`: Window/door sensors to monitor (assign areas for zoning)
 - `notify_device`: Device for notifications
 
 ### Optional Settings
@@ -82,7 +100,7 @@ An intelligent Home Assistant blueprint for HVAC control that goes beyond simple
 - [ ] Advanced door security checks for night time
 - [ ] Extended seasonal operation modes
 - [ ] Smart home system integrations
-- [ ] Multi-zone HVAC support
+- [x] Multi-zone HVAC support (area-based)
 - [ ] Energy consumption analytics
 - [ ] Custom notification templates
 
