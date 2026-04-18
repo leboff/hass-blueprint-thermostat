@@ -1,55 +1,82 @@
 blueprint:
-  name: "🏰 Yet Another Automatic HVAC Control Bluprint (YAAHCB) following the KISS Principle"
+  name: "🏰 Yet Another Automatic HVAC Control Blueprint (YAAHCB) - Multi-Zone KISS Edition"
   description: >
-    Turns off the HVAC when a window or door is opened (binary sensor 'on'), with optional notifications for high humidity, low pressure, and temperature. Restores climate state when windows are closed (binary sensor 'off'). Starts a timer before turning off the HVAC for energy-saving purposes.
+    Turns off the HVAC when a window or door is opened (binary sensor 'on'), with
+    optional notifications for high humidity, low pressure, and temperature.
+    Restores the climate state when windows are closed. Starts a timer before
+    turning off the HVAC for energy-saving purposes.
+
+    Supports multi-zone HVAC: pass multiple climate entities and the automation
+    will control only the ones whose Home Assistant area matches the window that
+    triggered it. Set Zone Mode to "shared" to fall back to single-pool behavior.
   domain: automation
   input:
-    climate_entity:
-      name: Climate Entity
+    climate_entities:
+      name: Climate Entities (Multi-Zone)
       description: >
-        Select the HVAC system entity to manage (e.g., air conditioning or heating).
+        One or more HVAC systems to manage. In "area" zone mode, only entities
+        whose area matches the triggering window's area are controlled.
+      default: []
       selector:
         entity:
           domain: climate
+          multiple: true
+    climate_entity:
+      name: Climate Entity (Legacy / Optional)
+      description: >
+        Deprecated - prefer Climate Entities. If set, it is merged into the
+        multi-zone list. Leave empty for new installs.
+      default: ""
+      selector:
+        entity:
+          domain: climate
+    zone_mode:
+      name: Zone Mode
+      description: >
+        "area": match windows to climate entities by HA area (true multi-zone).
+        "shared": any open window turns off every listed climate entity.
+      default: area
+      selector:
+        select:
+          options:
+          - area
+          - shared
     window_sensors:
       name: Window/Door Sensors
       description: >
-        The sensors that detect open windows or doors.
+        The sensors that detect open windows or doors. Assign each sensor to a
+        Home Assistant area to enable area-based zoning.
       selector:
         entity:
           domain: binary_sensor
           multiple: true
     temperature_sensor:
       name: Outside Temperature Sensor
-      description: >
-        Optional sensor for measuring outdoor temperature.
+      description: Optional sensor for measuring outdoor temperature.
+      default: ""
       selector:
         entity:
           domain: sensor
           device_class: temperature
-      default: ""
     humidity_sensor:
       name: Outside Humidity Sensor
-      description: >
-        Optional sensor for measuring outdoor humidity.
+      description: Optional sensor for measuring outdoor humidity.
+      default: ""
       selector:
         entity:
           domain: sensor
           device_class: humidity
-      default: ""
     pressure_sensor:
       name: Atmospheric Pressure Sensor
-      description: >
-        Optional sensor for measuring atmospheric pressure.
+      description: Optional sensor for measuring atmospheric pressure.
+      default: ""
       selector:
         entity:
           domain: sensor
           device_class: atmospheric_pressure
-      default: ""
     humidity_threshold:
       name: Humidity Threshold
-      description: >
-        Threshold for high humidity notifications.
+      description: Threshold for high humidity notifications.
       default: 60
       selector:
         number:
@@ -59,8 +86,7 @@ blueprint:
           step: 1
     pressure_threshold:
       name: Pressure Threshold
-      description: >
-        Threshold for low pressure notifications.
+      description: Threshold for low pressure notifications.
       default: 1000
       selector:
         number:
@@ -70,22 +96,19 @@ blueprint:
           step: 1
     notify_device:
       name: Notify Device
-      description: >
-        Device to send notifications to.
+      description: Device to send notifications to.
       selector:
         device:
           integration: mobile_app
     window_open_timer:
       name: Timer for Window Open Notification
-      description: >
-        Select the timer to use when a window is opened.
+      description: Timer entity used as the countdown when a window opens.
       selector:
         entity:
           domain: timer
     temp_high_threshold:
       name: High Temperature Threshold
-      description: >
-        Temperature threshold above which HVAC will be turned off immediately when windows are opened (optional).
+      description: Above this outdoor temperature, HVAC turns off immediately on window open.
       default: 25
       selector:
         number:
@@ -95,8 +118,7 @@ blueprint:
           step: 0.5
     temp_low_threshold:
       name: Low Temperature Threshold
-      description: >
-        Temperature threshold below which HVAC will be turned off immediately when windows are opened (optional).
+      description: Below this outdoor temperature, HVAC turns off immediately on window open.
       default: 15
       selector:
         number:
@@ -106,57 +128,55 @@ blueprint:
           step: 0.5
     daytime_hvac_timeout:
       name: Daytime HVAC Off Timeout
-      description: >
-        How long to wait before turning off the HVAC during the day (e.g., 6:00-22:00).
+      description: How long to wait before turning off the HVAC during the day.
       selector:
         duration:
           enable_day: false
     nighttime_hvac_timeout:
       name: Nighttime HVAC Off Timeout
-      description: >
-        How long to wait before turning off the HVAC during the night (e.g., 22:00-6:00).
+      description: How long to wait before turning off the HVAC during the night.
       selector:
         duration:
           enable_day: false
     night_check_time:
       name: Nighttime Check Time
-      description: >
-        Time to check if any windows are still open before night (format: HH:MM).
+      description: Time to check whether any windows are still open before bed.
       selector:
         time:
     night_start_time:
       name: Night Period Start
-      description: >
-        When the night period starts (format: HH:MM).
+      description: When the night period starts.
       selector:
         time:
     night_end_time:
       name: Night Period End
-      description: >
-        When the night period ends (format: HH:MM).
+      description: When the night period ends.
       selector:
         time:
     require_temperature_sensor:
       name: Require Temperature Sensor
-      description: If enabled, automation will not run without a valid temperature sensor
+      description: If enabled, the automation will not run without a valid temperature sensor.
       default: false
       selector:
         boolean:
     debug_mode:
       name: Debug Mode
-      description: Enable additional logging for troubleshooting
+      description: Emit extra logbook entries to help troubleshoot.
       default: false
       selector:
         boolean:
     restore_climate_state:
       name: Remember Previous Climate State
-      description: Restore the previous HVAC mode instead of always using auto
+      description: Call climate.turn_on to let HA restore the previous HVAC mode instead of forcing "auto".
       default: true
       selector:
         boolean:
     seasonal_mode:
       name: Seasonal Mode
-      description: Adjust behavior based on season
+      description: >
+        "auto" always acts on open windows. "summer" only acts when outdoor temp
+        is above the high threshold. "winter" only acts when outdoor temp is
+        below the low threshold.
       default: auto
       selector:
         select:
@@ -166,13 +186,22 @@ blueprint:
           - winter
     notification_cooldown:
       name: Notification Cooldown
-      description: Minimum time (in minutes) between notifications
+      description: Minimum minutes between repeat open-window notifications for the same window.
       default: 5
       selector:
         number:
-          min: 1
+          min: 0
           max: 60
           unit_of_measurement: "min"
+    notification_throttle_store:
+      name: Notification Throttle Helper (Optional)
+      description: >
+        Optional input_datetime helper used to store the last notification time.
+        When empty, the cooldown is skipped (notifications fire every time).
+      default: ""
+      selector:
+        entity:
+          domain: input_datetime
 
 variables:
   humidity_sensor: !input humidity_sensor
@@ -180,56 +209,135 @@ variables:
   temperature_sensor: !input temperature_sensor
   humidity_threshold: !input humidity_threshold
   pressure_threshold: !input pressure_threshold
+  temp_high_threshold: !input temp_high_threshold
+  temp_low_threshold: !input temp_low_threshold
   window_open_timer: !input window_open_timer
   window_sensors: !input window_sensors
+  climate_entities_input: !input climate_entities
+  climate_entity_legacy: !input climate_entity
+  zone_mode: !input zone_mode
+  seasonal_mode: !input seasonal_mode
+  restore_climate_state: !input restore_climate_state
+  debug_mode: !input debug_mode
+  require_temperature_sensor: !input require_temperature_sensor
+  notification_cooldown: !input notification_cooldown
+  notification_throttle_store: !input notification_throttle_store
   night_check_time: !input night_check_time
   night_start_time: !input night_start_time
   night_end_time: !input night_end_time
   daytime_hvac_timeout: !input daytime_hvac_timeout
   nighttime_hvac_timeout: !input nighttime_hvac_timeout
+
+  all_climates: >
+    {% set legacy = [climate_entity_legacy] if climate_entity_legacy else [] %}
+    {{ (climate_entities_input + legacy) | unique | list }}
+
   temp_sensor_available: >
-    {% set sensor = temperature_sensor %} {{ sensor | length > 0 and 
-       states(sensor) not in ['unknown', 'unavailable'] and 
-       states(sensor) | float(-1000) > -999 }}
+    {{ temperature_sensor | length > 0
+       and states(temperature_sensor) not in ['unknown', 'unavailable', 'none', None]
+       and states(temperature_sensor) | float(-999) > -998 }}
 
-  any_window_open: >
-    {% for sensor in window_sensors %}
-      {% if is_state(sensor, 'on') %}
-        {{ true }}
-        {% break %}
-      {% endif %}
-    {% endfor %} {{ false }}
+  trigger_entity: >
+    {{ trigger.entity_id if trigger is defined and trigger.entity_id is defined else '' }}
 
-  is_night_time: >
-    {% set current_hour = now().hour %} {% set night_start = night_start_time.split(':')[0] | int %} {% set night_end = night_end_time.split(':')[0] | int %} {{ current_hour >= night_start or current_hour < night_end }}
+  trigger_area: >
+    {{ area_id(trigger_entity) if trigger_entity else none }}
 
-  last_notification_key: "last_notification_{{trigger.entity_id}}"
+  trigger_area_label: >
+    {{ area_name(trigger_entity) if trigger_entity else 'your home' }}
 
-  # Add a helper variable to get window names
-  open_windows: >
-    {% set names = [] %} {% for sensor in window_sensors %}
-      {% if is_state(sensor, 'on') %}
-        {% set name = state_attr(sensor, 'friendly_name') or area_name(sensor) or 'Unknown window' %}
-        {% set names = names + [name] %}
-      {% endif %}
-    {% endfor %} {{ names | join(', ') }}
+  trigger_friendly: >
+    {{ state_attr(trigger_entity, 'friendly_name') or trigger_entity or 'a window' }}
 
-  closed_window: >
-    {% if trigger.entity_id is defined %}
-      {{ state_attr(trigger.entity_id, 'friendly_name') or area_name(trigger.entity_id) or 'Unknown window' }}
+  affected_climates: >
+    {% if zone_mode == 'shared' or not trigger_area %}
+      {{ all_climates }}
     {% else %}
-      'Unknown window'
+      {% set ns = namespace(result=[]) %}
+      {% for c in all_climates %}
+        {% if area_id(c) == trigger_area %}
+          {% set ns.result = ns.result + [c] %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.result }}
     {% endif %}
 
-  seasonal_temp_check: >
-    {% set mode = seasonal_mode %} {% if mode == 'auto' %}
-      {{ true }}  {# Always check in auto mode #}
-    {% elif mode == 'summer' and states(temperature_sensor) | float > temp_high_threshold %}
-      {{ true }}  {# In summer, only check high temps #}
-    {% elif mode == 'winter' and states(temperature_sensor) | float < temp_low_threshold %}
-      {{ true }}  {# In winter, only check low temps #}
+  zone_windows: >
+    {% if zone_mode == 'shared' or not trigger_area %}
+      {{ window_sensors }}
+    {% else %}
+      {% set ns = namespace(result=[]) %}
+      {% for w in window_sensors %}
+        {% if area_id(w) == trigger_area %}
+          {% set ns.result = ns.result + [w] %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.result }}
+    {% endif %}
+
+  zone_windows_open_count: >
+    {{ expand(zone_windows) | selectattr('state', 'eq', 'on') | list | count }}
+
+  any_window_open: >
+    {{ expand(window_sensors) | selectattr('state', 'eq', 'on') | list | count > 0 }}
+
+  open_windows_names: >
+    {{ expand(window_sensors)
+       | selectattr('state', 'eq', 'on')
+       | map(attribute='name')
+       | list
+       | join(', ') }}
+
+  is_night_time: >
+    {% set nh = night_start_time.split(':')[0] | int %}
+    {% set eh = night_end_time.split(':')[0] | int %}
+    {% set h = now().hour %}
+    {{ h >= nh or h < eh }}
+
+  active_hvac_timeout: >
+    {{ nighttime_hvac_timeout if is_night_time else daytime_hvac_timeout }}
+
+  outside_temp: >
+    {{ states(temperature_sensor) | float(0) if temp_sensor_available else none }}
+
+  outside_temp_extreme: >
+    {% if temp_sensor_available %}
+      {{ outside_temp > temp_high_threshold or outside_temp < temp_low_threshold }}
     {% else %}
       {{ false }}
+    {% endif %}
+
+  seasonal_allows_action: >
+    {% if seasonal_mode == 'auto' %}
+      {{ true }}
+    {% elif not temp_sensor_available %}
+      {{ true }}
+    {% elif seasonal_mode == 'summer' %}
+      {{ outside_temp > temp_high_threshold }}
+    {% elif seasonal_mode == 'winter' %}
+      {{ outside_temp < temp_low_threshold }}
+    {% else %}
+      {{ true }}
+    {% endif %}
+
+  timer_duration_label: >
+    {% set d = state_attr(window_open_timer, 'duration') %}
+    {% if d %}
+      {{ (as_timedelta(d).total_seconds() / 60) | round(0, 'floor') | int }} min
+    {% else %}
+      a few minutes
+    {% endif %}
+
+  cooldown_ok: >
+    {% if notification_throttle_store | length == 0 or notification_cooldown == 0 %}
+      {{ true }}
+    {% else %}
+      {% set last = states(notification_throttle_store) %}
+      {% if last in ['unknown', 'unavailable', 'none', None] %}
+        {{ true }}
+      {% else %}
+        {{ (as_timestamp(now()) - as_timestamp(last, 0)) / 60 > notification_cooldown }}
+      {% endif %}
     {% endif %}
 
 trigger:
@@ -248,41 +356,44 @@ trigger:
 - platform: time
   at: !input night_check_time
 
-condition: []
-
-# [Previous blueprint configuration and variables remain exactly the same until the action section]
+condition:
+- condition: template
+  value_template: >
+    {{ (not require_temperature_sensor) or temp_sensor_available }}
 
 action:
 - choose:
-  # BLOCK 1: Window Opening Handler with Environmental Checks and HVAC Control
+
+  # -----------------------------------------------------------------
+  # BLOCK 1 - window opened (or timer fired while a window is still open)
+  # -----------------------------------------------------------------
   - conditions:
     - condition: template
       value_template: >
-        {% if trigger is defined %}
-          {% if trigger.to_state is defined %}
-            {{ trigger.to_state.state == 'on' }}
-          {% elif trigger.event is defined %}
-            {{ trigger.event.event_type != 'timer.finished' }}
-          {% else %}
-            false
-          {% endif %}
-        {% else %}
-          false
-        {% endif %}
-    - condition: or
-      conditions:
-      - condition: state
-        entity_id: !input window_open_timer
-        state: "idle"
-      - condition: template
-        value_template: >
-          {% if trigger is defined and trigger.event is defined %}
-            {{ trigger.event.event_type == 'timer.finished' }}
-          {% else %}
-            false
-          {% endif %}
+        {{ (trigger.platform == 'state' and trigger.to_state.state == 'on')
+           or (trigger.platform == 'event'
+               and trigger.event.event_type == 'timer.finished'
+               and expand(window_sensors) | selectattr('state','eq','on') | list | count > 0) }}
+    - condition: template
+      value_template: "{{ seasonal_allows_action }}"
     sequence:
-    # Start notification timer only if it's idle
+
+    # Debug logbook entry
+    - if:
+        condition: template
+        value_template: "{{ debug_mode }}"
+      then:
+      - service: logbook.log
+        data:
+          name: HVAC Blueprint
+          message: >
+            Window event from {{ trigger_friendly }} (area={{ trigger_area_label }}).
+            Affected climates: {{ affected_climates | join(', ') or 'none' }}.
+            zone_mode={{ zone_mode }}, outside_temp={{ outside_temp }}.
+
+    # Start the shared timer only if it's idle (one countdown at a time is fine
+    # for most homes; users with heavy multi-zone needs can still deploy the
+    # blueprint once per zone with a separate timer each).
     - if:
         condition: state
         entity_id: !input window_open_timer
@@ -292,247 +403,208 @@ action:
         target:
           entity_id: !input window_open_timer
 
-    # Initial window open notification (with notification cooldown check)
+    # Open-window notification (respects cooldown if a throttle helper is set)
     - if:
         condition: template
-        value_template: >
-          {% set last_time = states('input_datetime.' + last_notification_key) %} {% if last_time != 'unknown' %}
-            {% set time_diff = (as_timestamp(now()) - as_timestamp(last_time)) / 60 %}
-            {{ time_diff > notification_cooldown }}
-          {% else %}
-            true
+        value_template: "{{ cooldown_ok }}"
+      then:
+      - device_id: !input notify_device
+        domain: mobile_app
+        type: notify
+        message: >
+          🚪 {{ trigger_friendly }} ({{ trigger_area_label }}) is open.
+          {% if temp_sensor_available %}Outside: {{ outside_temp }}°C.{% endif %}
+          {% if temp_sensor_available and outside_temp < temp_low_threshold %}
+          Please close within {{ timer_duration_label }} to conserve energy.
           {% endif %}
-      then:
-      - device_id: !input notify_device
-        domain: mobile_app
-        type: notify
-        message: >
-          🚪 The window or door in {{ area_name(window_sensors[0]) | default('an unknown area') }} has been opened. The current outside temperature is {{ states(temperature_sensor) | float }}°C. {% if states(temperature_sensor) | float < 15 %} Please close it within {{ (state_attr(window_open_timer, 'duration').split(':')[1] | int) }} minute{{ 's' if (state_attr(window_open_timer, 'duration').split(':')[1] | int) > 1 else '' }} to conserve energy. {% endif %}
+      - if:
+          condition: template
+          value_template: "{{ notification_throttle_store | length > 0 }}"
+        then:
+        - service: input_datetime.set_datetime
+          target:
+            entity_id: "{{ notification_throttle_store }}"
+          data:
+            datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
 
-    # Check humidity immediately
+    # Humidity advisory
     - if:
         condition: and
         conditions:
         - condition: template
-          value_template: "{{ humidity_sensor != '' }}"
-        - condition: numeric_state
-          entity_id: !input humidity_sensor
-          above: !input humidity_threshold
+          value_template: "{{ humidity_sensor | length > 0 }}"
+        - condition: template
+          value_template: >
+            {{ states(humidity_sensor) not in ['unknown','unavailable','none',None]
+               and states(humidity_sensor) | float(0) > humidity_threshold }}
       then:
       - device_id: !input notify_device
         domain: mobile_app
         type: notify
         message: >
-          💧 The humidity outside is currently {{ states(humidity_sensor) | float }}%, which is above the {{ humidity_threshold }}% threshold. Please be cautious about increased humidity levels.
+          💧 Humidity is {{ states(humidity_sensor) | float }}%, above the
+          {{ humidity_threshold }}% threshold.
 
-    # Check pressure immediately
+    # Pressure advisory
     - if:
         condition: and
         conditions:
         - condition: template
-          value_template: "{{ pressure_sensor != '' }}"
-        - condition: numeric_state
-          entity_id: !input pressure_sensor
-          below: !input pressure_threshold
+          value_template: "{{ pressure_sensor | length > 0 }}"
+        - condition: template
+          value_template: >
+            {{ states(pressure_sensor) not in ['unknown','unavailable','none',None]
+               and states(pressure_sensor) | float(9999) < pressure_threshold }}
       then:
       - device_id: !input notify_device
         domain: mobile_app
         type: notify
         message: >
-          🌧️ The atmospheric pressure outside is currently {{ states(pressure_sensor) | float }} hPa, below the {{ pressure_threshold }} hPa threshold. This may indicate potential bad weather. Please be cautious.
+          🌧️ Pressure is {{ states(pressure_sensor) | float }} hPa, below the
+          {{ pressure_threshold }} hPa threshold. Weather may be changing.
 
-    # Combined HVAC control with immediate and timed responses
-    - choose:
-      # Daytime handling
-      - conditions:
-        - condition: time
-          after: !input night_end_time
-          before: !input night_start_time
-        sequence:
-        - if:
-            condition: or
-            conditions:
-            - condition: numeric_state
-              entity_id: !input temperature_sensor
-              above: !input temp_high_threshold
-            - condition: numeric_state
-              entity_id: !input temperature_sensor
-              below: !input temp_low_threshold
-          then:
+    # ---- HVAC off path (immediate vs timed, merged day/night) ----
+    - if:
+        condition: template
+        value_template: "{{ affected_climates | count > 0 }}"
+      then:
+      - choose:
+        # Immediate shutoff when outdoor temp is out of comfort band
+        - conditions:
+          - condition: template
+            value_template: "{{ outside_temp_extreme }}"
+          sequence:
           - service: climate.turn_off
             target:
-              entity_id: !input climate_entity
+              entity_id: "{{ affected_climates }}"
           - device_id: !input notify_device
             domain: mobile_app
             type: notify
             message: >
-              ❄️ HVAC turned off immediately due to outside temperature ({{ states(temperature_sensor) | float }}°C) being outside comfort range.
-          else:
-          - delay: !input daytime_hvac_timeout
-          - condition: state
-            entity_id: !input window_sensors
-            state: "on"
+              ❄️ HVAC off (zone: {{ trigger_area_label }}) because outside is
+              {{ outside_temp }}°C - outside the comfort band.
+        default:
+          # Delayed shutoff - timeout depends on is_night_time
+          - delay: "{{ active_hvac_timeout }}"
+          # Re-check: is any window in THIS zone still open?
+          - condition: template
+            value_template: >
+              {{ expand(zone_windows) | selectattr('state','eq','on') | list | count > 0 }}
           - service: climate.turn_off
             target:
-              entity_id: !input climate_entity
+              entity_id: "{{ affected_climates }}"
           - device_id: !input notify_device
             domain: mobile_app
             type: notify
             message: >
-              ⏱️ The window has remained open for {{ daytime_hvac_timeout.seconds // 60 }} minute{{'s' if daytime_hvac_timeout.seconds // 60 > 1 else ''}} during daytime. The HVAC system has been turned off for energy conservation.
+              ⏱️ Window in {{ trigger_area_label }} stayed open for
+              {{ (active_hvac_timeout.seconds // 60) if active_hvac_timeout.seconds is defined
+                 else (as_timedelta(active_hvac_timeout).total_seconds() / 60) | int }}
+              min during {{ 'nighttime' if is_night_time else 'daytime' }}.
+              HVAC has been turned off.
 
-      # Nighttime handling
-      - conditions:
-        - condition: time
-          after: !input night_start_time
-          before: !input night_end_time
-        sequence:
-        - if:
-            condition: or
-            conditions:
-            - condition: numeric_state
-              entity_id: !input temperature_sensor
-              above: !input temp_high_threshold
-            - condition: numeric_state
-              entity_id: !input temperature_sensor
-              below: !input temp_low_threshold
-          then:
-          - service: climate.turn_off
-            target:
-              entity_id: !input climate_entity
-          - device_id: !input notify_device
-            domain: mobile_app
-            type: notify
-            message: >
-              ❄️ HVAC turned off immediately due to outside temperature ({{ states(temperature_sensor) | float }}°C) being outside comfort range.
-          else:
-          - delay: !input nighttime_hvac_timeout
-          - condition: state
-            entity_id: !input window_sensors
-            state: "on"
-          - service: climate.turn_off
-            target:
-              entity_id: !input climate_entity
-          - device_id: !input notify_device
-            domain: mobile_app
-            type: notify
-            message: >
-              ⏱️ The window has remained open for {{ nighttime_hvac_timeout.seconds // 60 }} minute{{'s' if nighttime_hvac_timeout.seconds // 60 > 1 else ''}} during nighttime. The HVAC system has been turned off for energy conservation.
-
-  # BLOCK 2: Window Closing Handler
+  # -----------------------------------------------------------------
+  # BLOCK 2 - window closed
+  # -----------------------------------------------------------------
   - conditions:
     - condition: template
-      value_template: "{{ trigger.platform == 'state' and trigger.to_state.state == 'off' }}"
+      value_template: >
+        {{ trigger.platform == 'state' and trigger.to_state.state == 'off' }}
     sequence:
-    # Cancel any running timer first
     - service: timer.cancel
       target:
         entity_id: !input window_open_timer
-    # Check remaining open windows
-    - variables:
-        windows_still_open: >
-          {% set open_count = 0 %} {% for sensor in window_sensors %}
-            {% if is_state(sensor, 'on') %}
-              {% set open_count = open_count + 1 %}
-            {% endif %}
-          {% endfor %} {{ open_count }}
-    # Handle HVAC restoration and notifications
+
     - if:
         condition: template
-        value_template: "{{ windows_still_open == 0 }}"
+        value_template: "{{ debug_mode }}"
       then:
-      - service: climate.turn_on
-        target:
-          entity_id: !input climate_entity
-      - delay: 1
-      # Restore previous climate state or set to auto
-      - if:
-          condition: template
-          value_template: "{{ restore_climate_state }}"
-        then:
+      - service: logbook.log
+        data:
+          name: HVAC Blueprint
+          message: >
+            {{ trigger_friendly }} closed. zone={{ trigger_area_label }},
+            zone_windows_still_open={{ zone_windows_open_count }},
+            affected_climates={{ affected_climates | join(', ') or 'none' }}.
+
+    # Only restore if every window in the affected zone is now closed
+    - if:
+        condition: template
+        value_template: >
+          {{ zone_windows_open_count == 0 and affected_climates | count > 0 }}
+      then:
+      - choose:
+        - conditions:
+          - condition: template
+            value_template: "{{ restore_climate_state }}"
+          sequence:
+          # climate.turn_on lets each integration restore its prior hvac_mode
+          - service: climate.turn_on
+            target:
+              entity_id: "{{ affected_climates }}"
+        default:
         - service: climate.set_hvac_mode
           target:
-            entity_id: !input climate_entity
-          data:
-            hvac_mode: "{{ state_attr(climate_entity, 'hvac_mode') }}"
-        else:
-        - service: climate.set_hvac_mode
-          target:
-            entity_id: !input climate_entity
+            entity_id: "{{ affected_climates }}"
           data:
             hvac_mode: "auto"
       - device_id: !input notify_device
         domain: mobile_app
         type: notify
         message: >
-          ✅ {{ closed_window }} has been closed. All windows are now closed. The HVAC system has been restored{% if restore_climate_state %} to its previous state{% else %} to auto mode{% endif %}.
-      else:
+          ✅ {{ trigger_friendly }} closed. All windows in
+          {{ trigger_area_label }} are closed. HVAC restored
+          {% if restore_climate_state %}to its previous mode{% else %}to auto{% endif %}.
+    - if:
+        condition: template
+        value_template: "{{ zone_windows_open_count > 0 }}"
+      then:
       - device_id: !input notify_device
         domain: mobile_app
         type: notify
         message: >
-          ℹ️ {{ closed_window }} has been closed. The following windows are still open: {{ open_windows }}
+          ℹ️ {{ trigger_friendly }} closed. Still open in
+          {{ trigger_area_label }}:
+          {{ expand(zone_windows) | selectattr('state','eq','on')
+             | map(attribute='name') | list | join(', ') }}.
 
-  # BLOCK 3: Timer Events Handler
-  - conditions:
-    - condition: and
-      conditions:
-      - condition: template
-        value_template: >
-          {% if trigger is defined and trigger.event is defined %}
-            {{ trigger.event.event_type == 'timer.finished' and 
-               trigger.event.data.entity_id == window_open_timer }}
-          {% else %}
-            false
-          {% endif %}
-      - condition: state
-        entity_id: !input window_sensors
-        state: "on"
-      - condition: state
-        entity_id: !input window_open_timer
-        state: "idle"
-    sequence:
-    - choose:
-      # Temperature-based reminder when window is open too long
-      - conditions:
-        - condition: template
-          value_template: "{{ temperature_sensor | length > 0 }}"
-        - condition: numeric_state
-          entity_id: !input temperature_sensor
-          below: 15
-        sequence:
-        - device_id: !input notify_device
-          domain: mobile_app
-          type: notify
-          message: >
-            🥶 Reminder: The window or door in {{ area_name(window_sensors[0]) | default('an unknown area') }} has been open for {{
-              state_attr(window_open_timer, 'duration').split(':')[1] | int
-            }} minutes. The outside temperature is below 15°C. Please check your windows.
-      # Default reminder without temperature data
-      - conditions:
-        - condition: template
-          value_template: "{{ temperature_sensor | length == 0 }}"
-        sequence:
-        - device_id: !input notify_device
-          domain: mobile_app
-          type: notify
-          message: >
-            ⏱️ Reminder: The window or door in {{ area_name(window_sensors[0]) | default('an unknown area') }} has been open for {{
-              state_attr(window_open_timer, 'duration').split(':')[1] | int
-            }} minutes. Please close it to conserve energy. 
-
-  # BLOCK 4: Night Check Handler
+  # -----------------------------------------------------------------
+  # BLOCK 3 - timer finished reminder (window still open somewhere)
+  # -----------------------------------------------------------------
   - conditions:
     - condition: template
-      value_template: "{{ trigger.platform == 'time' }}"
-    - condition: state
-      entity_id: !input window_sensors
-      state: "on"
+      value_template: >
+        {{ trigger.platform == 'event'
+           and trigger.event.event_type == 'timer.finished'
+           and trigger.event.data.entity_id == window_open_timer }}
+    - condition: template
+      value_template: "{{ any_window_open }}"
     sequence:
     - device_id: !input notify_device
       domain: mobile_app
       type: notify
       message: >
-        🌙 Night Check: A window or door in {{ area_name(window_sensors[0]) | default('your home') }} is still open. Please close it before going to bed (night period starts at {{ night_start_time }}). Current outside temperature: {{ states(temperature_sensor) | float }}°C.
+        {% if temp_sensor_available and outside_temp < 15 %}🥶{% else %}⏱️{% endif %}
+        Reminder: these windows are still open after {{ timer_duration_label }}:
+        {{ open_windows_names }}.
+        {% if temp_sensor_available %}Outside: {{ outside_temp }}°C.{% endif %}
+
+  # -----------------------------------------------------------------
+  # BLOCK 4 - nightly pre-bed check
+  # -----------------------------------------------------------------
+  - conditions:
+    - condition: template
+      value_template: "{{ trigger.platform == 'time' }}"
+    - condition: template
+      value_template: "{{ any_window_open }}"
+    sequence:
+    - device_id: !input notify_device
+      domain: mobile_app
+      type: notify
+      message: >
+        🌙 Night check: windows still open before bed:
+        {{ open_windows_names }}.
+        {% if temp_sensor_available %}Outside: {{ outside_temp }}°C.{% endif %}
+        Night period starts at {{ night_start_time }}.
 
 mode: restart
