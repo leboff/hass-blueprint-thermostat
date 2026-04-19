@@ -520,29 +520,64 @@ action:
           - condition: template
             value_template: "{{ outside_temp_extreme }}"
           sequence:
-          # Snapshot the current HVAC state so we can truly restore later.
-          # Only snapshot when at least one climate is NOT already off, to
-          # avoid overwriting a valid snapshot with an all-off state.
+          # Filter out climates we should NOT turn off:
+          #   - already off (no-op)
+          #   - non-off BUT last_changed is after our snapshot's last_changed,
+          #     meaning the user manually turned it back on after the
+          #     automation previously shut it off. Respect that override.
+          - variables:
+              climates_needing_off: >
+                {% set snap_entity = 'scene.' + snapshot_scene_id %}
+                {% set snap_state = states[snap_entity] %}
+                {% set snap_ts = as_timestamp(snap_state.last_changed)
+                                 if snap_state is not none else 0 %}
+                {% set ns = namespace(result=[]) %}
+                {% for c in affected_climates %}
+                  {% set cs = states[c] %}
+                  {% if cs is not none and cs.state != 'off' %}
+                    {% if snap_ts == 0
+                          or as_timestamp(cs.last_changed) <= snap_ts %}
+                      {% set ns.result = ns.result + [c] %}
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
+                {{ ns.result }}
           - if:
               condition: template
-              value_template: >
-                {{ restore_climate_state
-                   and expand(affected_climates)
-                       | rejectattr('state','eq','off') | list | count > 0 }}
+              value_template: "{{ climates_needing_off | count > 0 }}"
             then:
-            - service: scene.create
-              data:
-                scene_id: "{{ snapshot_scene_id }}"
-                snapshot_entities: "{{ affected_climates }}"
-          - service: climate.turn_off
-            target:
-              entity_id: "{{ affected_climates }}"
-          - device_id: !input notify_device
-            domain: mobile_app
-            type: notify
-            message: >
-              ❄️ HVAC off (zone: {{ trigger_area_label }}) because outside is
-              {{ outside_temp }} {{ temperature_unit }} - outside the comfort band.
+            # Snapshot only the climates we're about to turn off. Climates
+            # already off or manually overridden are left out so scene.turn_on
+            # on close doesn't overwrite the user's choices.
+            - if:
+                condition: template
+                value_template: "{{ restore_climate_state }}"
+              then:
+              - service: scene.create
+                data:
+                  scene_id: "{{ snapshot_scene_id }}"
+                  snapshot_entities: "{{ climates_needing_off }}"
+            - service: climate.turn_off
+              target:
+                entity_id: "{{ climates_needing_off }}"
+            - device_id: !input notify_device
+              domain: mobile_app
+              type: notify
+              message: >
+                ❄️ HVAC off (zone: {{ trigger_area_label }}) because outside is
+                {{ outside_temp }} {{ temperature_unit }} - outside the comfort band.
+            else:
+            - if:
+                condition: template
+                value_template: "{{ debug_mode }}"
+              then:
+              - service: logbook.log
+                data:
+                  name: HVAC Blueprint
+                  message: >
+                    Skipping immediate HVAC-off in {{ trigger_area_label }}:
+                    all affected climates are already off or have been
+                    manually turned back on since the last automation shutoff.
         default:
           # Delayed shutoff - timeout depends on is_night_time
           - delay: "{{ active_hvac_timeout }}"
@@ -550,29 +585,62 @@ action:
           - condition: template
             value_template: >
               {{ expand(zone_windows) | selectattr('state','eq','on') | list | count > 0 }}
+          # Same manual-override filter as the immediate path. Re-evaluated
+          # after the delay so a user turning the HVAC back on during the
+          # timeout window is respected.
+          - variables:
+              climates_needing_off: >
+                {% set snap_entity = 'scene.' + snapshot_scene_id %}
+                {% set snap_state = states[snap_entity] %}
+                {% set snap_ts = as_timestamp(snap_state.last_changed)
+                                 if snap_state is not none else 0 %}
+                {% set ns = namespace(result=[]) %}
+                {% for c in affected_climates %}
+                  {% set cs = states[c] %}
+                  {% if cs is not none and cs.state != 'off' %}
+                    {% if snap_ts == 0
+                          or as_timestamp(cs.last_changed) <= snap_ts %}
+                      {% set ns.result = ns.result + [c] %}
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
+                {{ ns.result }}
           - if:
               condition: template
-              value_template: >
-                {{ restore_climate_state
-                   and expand(affected_climates)
-                       | rejectattr('state','eq','off') | list | count > 0 }}
+              value_template: "{{ climates_needing_off | count > 0 }}"
             then:
-            - service: scene.create
-              data:
-                scene_id: "{{ snapshot_scene_id }}"
-                snapshot_entities: "{{ affected_climates }}"
-          - service: climate.turn_off
-            target:
-              entity_id: "{{ affected_climates }}"
-          - device_id: !input notify_device
-            domain: mobile_app
-            type: notify
-            message: >
-              ⏱️ Window in {{ trigger_area_label }} stayed open for
-              {{ (active_hvac_timeout.seconds // 60) if active_hvac_timeout.seconds is defined
-                 else (as_timedelta(active_hvac_timeout).total_seconds() / 60) | int }}
-              min during {{ 'nighttime' if is_night_time else 'daytime' }}.
-              HVAC has been turned off.
+            - if:
+                condition: template
+                value_template: "{{ restore_climate_state }}"
+              then:
+              - service: scene.create
+                data:
+                  scene_id: "{{ snapshot_scene_id }}"
+                  snapshot_entities: "{{ climates_needing_off }}"
+            - service: climate.turn_off
+              target:
+                entity_id: "{{ climates_needing_off }}"
+            - device_id: !input notify_device
+              domain: mobile_app
+              type: notify
+              message: >
+                ⏱️ Window in {{ trigger_area_label }} stayed open for
+                {{ (active_hvac_timeout.seconds // 60) if active_hvac_timeout.seconds is defined
+                   else (as_timedelta(active_hvac_timeout).total_seconds() / 60) | int }}
+                min during {{ 'nighttime' if is_night_time else 'daytime' }}.
+                HVAC has been turned off.
+            else:
+            - if:
+                condition: template
+                value_template: "{{ debug_mode }}"
+              then:
+              - service: logbook.log
+                data:
+                  name: HVAC Blueprint
+                  message: >
+                    Skipping delayed HVAC-off in {{ trigger_area_label }}:
+                    all affected climates are already off or have been
+                    manually turned back on since the last automation shutoff.
 
   # -----------------------------------------------------------------
   # BLOCK 2 - window closed
